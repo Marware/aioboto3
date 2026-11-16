@@ -3,28 +3,31 @@ name: CI
 on:
   push:
     branches:
-      - '*'
+      - '**'
     tags:
       - '*'
+  workflow_dispatch:
   pull_request:
     branches:
       - 'main'
 
 jobs:
   build:
-    name: Build distribution 📦
+    name: Build distribution
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
       - name: Install uv
         uses: astral-sh/setup-uv@v7
-      - name: Build distribution 📦
+      - name: Build distribution
         run: uv build
-      - name: Check distribution 📦
+      - name: Check distribution
         run: uvx twine check --strict dist/*
-      - name: Upload distribution 📦
-        uses: actions/upload-artifact@v5
+      - name: Upload distribution
+        uses: actions/upload-artifact@v6
         with:
           name: python-package-distributions
           path: dist/
@@ -36,13 +39,11 @@ jobs:
     strategy:
       matrix:
         python-version:
-          - "3.9"
           - "3.10"
           - "3.11"
           - "3.12"
           - "3.13"
-          # - "3.14"  # Disabled until moto[server] updates its dependencies so that pydantic rust parts stop erroring.
-          # pydantic-core` (v2.33.2) <-  `pydantic` (v2.11.7) <- `aws-sam-translator` (v1.99.0) <- `cfn-lint` (v1.38.3) <- `moto[server]` (v5.1.10)
+          - "3.14"
         os:
           - ubuntu-24.04
           - ubuntu-24.04-arm
@@ -57,12 +58,16 @@ jobs:
       fail-fast: false
     env:
       UV_FROZEN: 1
+      AWS_ACCESS_KEY_ID: testing
+      AWS_SECRET_ACCESS_KEY: testing
+      AWS_DEFAULT_REGION: eu-central-1
+      AWS_EC2_METADATA_DISABLED: 'true'
     timeout-minutes: 10
     steps:
       - name: Checkout
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
         with:
-          submodules: true
+          fetch-depth: 0
       - name: Install uv
         uses: astral-sh/setup-uv@v7
         with:
@@ -70,8 +75,7 @@ jobs:
       - name: Run unittests
         env:
           COLOR: 'yes'
-        run: |
-          uv run pytest
+        run: uv run --frozen --no-default-groups --group dev --all-extras pytest
 
   check:  # This job does nothing and is only used for the branch protection
     if: always()
@@ -88,8 +92,8 @@ jobs:
           jobs: ${{ toJSON(needs) }}
 
   publish:
-    name: Publish Python 🐍 distribution 📦 to PyPI
-    if: github.ref_type == 'tag'
+    name: Publish distribution to PyPI
+    if: github.repository == 'terricain/aioboto3' && github.ref_type == 'tag'
     needs:
       - check
     runs-on: ubuntu-24.04
@@ -100,15 +104,15 @@ jobs:
       id-token: write
     timeout-minutes: 5
     steps:
-      - name: Download distribution 📦
-        uses: actions/download-artifact@v6
+      - name: Download distribution
+        uses: actions/download-artifact@v7
         with:
           name: python-package-distributions
           path: dist/
-      - name: Check if distribution 📦 names match git tag
+      - name: Check if distribution names match git tag
         run: |
           VERSION=${GITHUB_REF_NAME#v}  # This removes the 'v' from the tag
           test -f "dist/aioboto3-${VERSION}.tar.gz"
           test -f "dist/aioboto3-${VERSION}-py3-none-any.whl"
-      - name: Publish distribution 📦 to PyPI
+      - name: Publish distribution to PyPI
         uses: pypa/gh-action-pypi-publish@release/v1

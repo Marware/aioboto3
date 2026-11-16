@@ -2,12 +2,16 @@
 Async AWS SDK for Python
 ========================
 
+This fork at https://github.com/Marware/aioboto3 tracks aiobotocore releases.
+It requires Python 3.10 or newer and resolves a boto3 version compatible with
+aiobotocore. See ``docs/maintenance.rst`` for the update and release process.
+
 
 .. image:: https://img.shields.io/pypi/v/aioboto3.svg
         :target: https://pypi.python.org/pypi/aioboto3
 
-.. image:: https://github.com/terrycain/aioboto3/actions/workflows/CI.yml/badge.svg
-        :target: https://github.com/terrycain/aioboto3/actions
+.. image:: https://github.com/Marware/aioboto3/actions/workflows/CI.yml/badge.svg
+        :target: https://github.com/Marware/aioboto3/actions
 
 .. image:: https://readthedocs.org/projects/aioboto3/badge/?version=latest
         :target: https://aioboto3.readthedocs.io

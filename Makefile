@@ -1,6 +1,6 @@
 
 lint:
-	uv run python -m flake8 aioboto3 tests
+	uv run --no-default-groups --group dev --all-extras python -m flake8 aioboto3 tests
 
 test:
-	uv run pytest
+	uv run --no-default-groups --group dev --all-extras pytest

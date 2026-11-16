@@ -5,9 +5,10 @@ authors = [
     {name = "Terri Cain", email = "terri@dolphincorp.co.uk"},
 ]
 license = {text = "Apache-2.0"}
-requires-python = ">=3.9"
+requires-python = ">=3.10"
 dependencies = [
-    "aiobotocore[boto3]==2.25.1",
+    "aiobotocore==3.10.0",
+    "boto3>=1.43.115,<2",
     "aiofiles>=23.2.1",
 ]
 
@@ -23,7 +24,6 @@ classifiers = [
     "License :: OSI Approved :: Apache Software License",
     "Natural Language :: English",
     "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3.9",
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
@@ -33,8 +33,8 @@ classifiers = [
 dynamic = ["version"]
 
 [project.urls]
-homepage = "https://github.com/terricain/aioboto3"
-repository = "https://github.com/terricain/aioboto3"
+homepage = "https://github.com/Marware/aioboto3"
+repository = "https://github.com/Marware/aioboto3"
 documentation = "https://readthedocs.org/projects/aioboto3/"
 
 [project.optional-dependencies]
@@ -56,7 +56,7 @@ dev = [
     "aiofiles",
     "moto[server]",
     "chalice<2.0.0,>=1.24.0",
-    "pytest-asyncio<1.0.0,>=0.19.0",
+    "pytest-asyncio>=1.2.0,<2",
 ]
 docs = [
     "sphinx",
