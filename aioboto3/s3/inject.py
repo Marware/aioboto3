@@ -443,7 +443,7 @@ async def upload_fileobj(
                         await Callback(current_bytes)
                     else:
                         Callback(current_bytes)
-                except:  # noqa: E722
+                except Exception:
                     pass
 
             # Mark task as done so .join() will work later on
@@ -502,31 +502,43 @@ async def upload_fileobj(
     file_reader_future = asyncio.ensure_future(file_reader())
     futures = [asyncio.ensure_future(uploader()) for _ in range(0, Config.max_request_concurrency)]
 
-    # Wait for file reader to finish
+    waiters = []
+    upload_completed = False
+
+    async def cleanup():
+        # Stop all local work before aborting so no uploader is still using the client.
+        tasks = [file_reader_future, *futures, *waiters]
+        for task in tasks:
+            if not task.done():
+                task.cancel()
+        await asyncio.gather(*tasks, return_exceptions=True)
+
+        if not upload_completed:
+            try:
+                await self.abort_multipart_upload(Bucket=Bucket, Key=Key, UploadId=upload_id)
+            except Exception:
+                # Cleanup must not replace the original upload error or cancellation.
+                logger.debug('Failed to abort multipart upload %s', upload_id, exc_info=True)
+
     try:
-        await file_reader_future
-    except Exception as err:
-        # if the file reader raises, we need to clean up the uploaders
-        exception = err
-        exception_event.set()
-    # So by this point all of the file is read and in a queue
-
-    # wait for either io queue is finished, or an exception has been raised
-    _, pending = await asyncio.wait(
-        {asyncio.create_task(io_queue.join()), asyncio.create_task(exception_event.wait())},
-        return_when=asyncio.FIRST_COMPLETED
-    )
-
-    if exception_event.is_set() or len(finished_parts) != expected_parts:
-        # An exception during upload or for some reason the finished parts dont match the expected parts, cancel upload
-        await self.abort_multipart_upload(Bucket=Bucket, Key=Key, UploadId=upload_id)
-        # Raise exception later after we've disposed of the pending co-routines
-    else:
-        # All io chunks from the queue have been successfully uploaded
+        waiters = [asyncio.create_task(exception_event.wait())]
+        # An uploader can fail while the reader is blocked on a full queue.
+        # Stop waiting for the reader as soon as that failure is reported.
+        await asyncio.wait([file_reader_future, *waiters], return_when=asyncio.FIRST_COMPLETED)
         try:
-            # Sort the finished parts as they must be in order
-            finished_parts.sort(key=lambda item: item['PartNumber'])
+            if file_reader_future.done():
+                await file_reader_future
+        except Exception as err:
+            exception = err
+            exception_event.set()
 
+        if not exception_event.is_set():
+            # Keep both tasks even if cancellation interrupts asyncio.wait().
+            waiters.append(asyncio.create_task(io_queue.join()))
+            await asyncio.wait(waiters, return_when=asyncio.FIRST_COMPLETED)
+
+        if not exception_event.is_set() and len(finished_parts) == expected_parts:
+            finished_parts.sort(key=lambda item: item['PartNumber'])
             await self.complete_multipart_upload(
                 Bucket=Bucket,
                 Key=Key,
@@ -534,36 +546,20 @@ async def upload_fileobj(
                 MultipartUpload={'Parts': finished_parts},
                 **complete_upload_args
             )
-        except Exception as err:
-            # We failed to complete the upload, try and abort, then return the orginal error
-            exception = err
+            upload_completed = True
+    finally:
+        # Shield and await cleanup through repeated cancellation. The client context
+        # must stay open until the uploaders have stopped and the abort has finished.
+        cleanup_task = asyncio.create_task(cleanup())
+        cleanup_cancelled = False
+        while not cleanup_task.done():
             try:
-                await self.abort_multipart_upload(Bucket=Bucket, Key=Key, UploadId=upload_id)
-            except:
-                pass
-
-    # Close either the Queue.join() coro, or the event.wait() coro
-    for coro in pending:
-        if not coro.done():
-            coro.cancel()
-            try:
-                await coro
-            except:
-                pass
-
-    # Cancel any remaining futures, though if successful they'll be done
-    cancelled = []
-    for future in futures:
-        if not future.done():
-            future.cancel()
-            cancelled.append(future)
-        else:
-            uploaded_parts = future.result()
-            logger.debug('Future uploaded {0} parts'.format(uploaded_parts))
-    if cancelled:
-        for uploaded_parts in await asyncio.gather(*cancelled, return_exceptions=True):
-            if isinstance(uploaded_parts, int):
-                logger.debug('Future uploaded {0} parts'.format(uploaded_parts))
+                await asyncio.shield(cleanup_task)
+            except asyncio.CancelledError:
+                cleanup_cancelled = True
+        cleanup_task.result()
+        if cleanup_cancelled:
+            raise asyncio.CancelledError()
 
     # Raise an exception now after everythings cleaned up
     if exception:

@@ -2,6 +2,15 @@
 History
 =======
 
+Unreleased
+----------
+
+* Track aiobotocore 3.10.0 and declare boto3 directly after removal of the
+  aiobotocore boto3 extra. Python 3.10 or newer is required.
+* Add weekly aiobotocore dependency updates and test Python 3.10 through 3.14.
+* Clean up multipart upload tasks and abort unfinished uploads when cancelled,
+  based on upstream PR #409 by @sound1ust.
+
 15.5.0 (2025-10-29)
 -------------------
 

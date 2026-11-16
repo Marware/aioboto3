@@ -12,6 +12,7 @@ Contents:
    cse
    chalice
    contributing
+   maintenance
    changelog
 
 Indices and tables
