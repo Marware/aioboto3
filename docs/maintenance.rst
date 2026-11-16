@@ -44,6 +44,8 @@ Reviewed on 2026-11-16:
 * `#409 <https://github.com/terricain/aioboto3/pull/409>`_: include the multipart
   cancellation fix by @sound1ust. The adaptation also tracks queue waiters
   before awaiting them and waits through repeated cancellation during cleanup.
+  Uploader failures also stop readers blocked on a full queue, and progress
+  callbacks do not swallow cancellation.
   Tests use events to choose the cancellation point instead of timing sleeps.
 * `#397 <https://github.com/terricain/aioboto3/pull/397>`_: include the GitHub
   Actions version updates.

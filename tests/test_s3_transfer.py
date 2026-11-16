@@ -34,7 +34,7 @@ async def test_multipart_transfer_config(config_class):
     client.abort_multipart_upload.assert_not_awaited()
 
 
-@pytest.mark.parametrize('cancel_during', ['upload', 'complete'])
+@pytest.mark.parametrize('cancel_during', ['upload', 'complete', 'callback'])
 @pytest.mark.asyncio
 async def test_multipart_cancellation_stops_tasks_before_abort(cancel_during):
     before = asyncio.all_tasks()
@@ -42,7 +42,7 @@ async def test_multipart_cancellation_stops_tasks_before_abort(cancel_during):
     stopped = asyncio.Event()
     client = make_client()
 
-    async def block(**kwargs):
+    async def block(*args, **kwargs):
         started.set()
         try:
             await asyncio.Event().wait()
@@ -52,14 +52,19 @@ async def test_multipart_cancellation_stops_tasks_before_abort(cancel_during):
     async def abort(**kwargs):
         assert stopped.is_set()
 
-    operation = client.upload_part if cancel_during == 'upload' else client.complete_multipart_upload
-    operation.side_effect = block
+    if cancel_during == 'upload':
+        client.upload_part.side_effect = block
+    elif cancel_during == 'complete':
+        client.complete_multipart_upload.side_effect = block
     client.abort_multipart_upload.side_effect = abort
     config = TransferConfig(
         multipart_threshold=4, multipart_chunksize=4, io_chunksize=4,
         max_concurrency=1, max_io_queue=1,
     )
-    task = asyncio.create_task(upload_fileobj(client, BytesIO(b'0123456789'), 'bucket', 'key', Config=config))
+    task = asyncio.create_task(upload_fileobj(
+        client, BytesIO(b'0123456789'), 'bucket', 'key', Config=config,
+        Callback=block if cancel_during == 'callback' else None,
+    ))
     try:
         await asyncio.wait_for(started.wait(), timeout=5)
         task.cancel()
@@ -120,10 +125,16 @@ async def test_abort_error_preserves_transfer_error(failure):
     operation = client.upload_part if failure == 'upload' else client.complete_multipart_upload
     operation.side_effect = error
     client.abort_multipart_upload.side_effect = RuntimeError('abort failed')
-    config = TransferConfig(multipart_threshold=4, multipart_chunksize=4, io_chunksize=4)
+    config = TransferConfig(
+        multipart_threshold=4, multipart_chunksize=4, io_chunksize=4,
+        max_concurrency=1, max_io_queue=1,
+    )
 
     with pytest.raises(ValueError) as caught:
-        await upload_fileobj(client, BytesIO(b'0123456789'), 'bucket', 'key', Config=config)
+        await asyncio.wait_for(
+            upload_fileobj(client, BytesIO(b'0123456789abcdef'), 'bucket', 'key', Config=config),
+            timeout=5,
+        )
 
     assert caught.value is error
     client.abort_multipart_upload.assert_awaited_once()

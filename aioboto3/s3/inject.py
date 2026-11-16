@@ -443,7 +443,7 @@ async def upload_fileobj(
                         await Callback(current_bytes)
                     else:
                         Callback(current_bytes)
-                except:  # noqa: E722
+                except Exception:
                     pass
 
             # Mark task as done so .join() will work later on
@@ -521,15 +521,21 @@ async def upload_fileobj(
                 logger.debug('Failed to abort multipart upload %s', upload_id, exc_info=True)
 
     try:
+        waiters = [asyncio.create_task(exception_event.wait())]
+        # An uploader can fail while the reader is blocked on a full queue.
+        # Stop waiting for the reader as soon as that failure is reported.
+        await asyncio.wait([file_reader_future, *waiters], return_when=asyncio.FIRST_COMPLETED)
         try:
-            await file_reader_future
+            if file_reader_future.done():
+                await file_reader_future
         except Exception as err:
             exception = err
             exception_event.set()
 
-        # Keep both tasks even if cancellation interrupts asyncio.wait().
-        waiters = [asyncio.create_task(io_queue.join()), asyncio.create_task(exception_event.wait())]
-        await asyncio.wait(waiters, return_when=asyncio.FIRST_COMPLETED)
+        if not exception_event.is_set():
+            # Keep both tasks even if cancellation interrupts asyncio.wait().
+            waiters.append(asyncio.create_task(io_queue.join()))
+            await asyncio.wait(waiters, return_when=asyncio.FIRST_COMPLETED)
 
         if not exception_event.is_set() and len(finished_parts) == expected_parts:
             finished_parts.sort(key=lambda item: item['PartNumber'])

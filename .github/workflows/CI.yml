@@ -3,7 +3,7 @@ name: CI
 on:
   push:
     branches:
-      - '**'
+      - 'main'
     tags:
       - '*'
   workflow_dispatch:
@@ -57,7 +57,6 @@ jobs:
             os: ubuntu-24.04
       fail-fast: false
     env:
-      UV_FROZEN: 1
       AWS_ACCESS_KEY_ID: testing
       AWS_SECRET_ACCESS_KEY: testing
       AWS_DEFAULT_REGION: eu-central-1
@@ -72,6 +71,8 @@ jobs:
         uses: astral-sh/setup-uv@v7
         with:
           python-version: ${{ matrix.python-version }}
+      - name: Check lockfile
+        run: uv lock --check
       - name: Run unittests
         env:
           COLOR: 'yes'

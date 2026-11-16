@@ -80,17 +80,18 @@ async def test_kms_crypto_context_success(moto_patch, region, bucket_name, kms_k
         assert kms_context.kms_key == kms_key_alias
 
         await kms_context.setup()
-        assert kms_context._kms_client is not None
+        try:
+            assert kms_context._kms_client is not None
 
-        aes_key, material_description, encrypted_aes_key = await kms_context.get_encryption_aes_key()
+            aes_key, material_description, encrypted_aes_key = await kms_context.get_encryption_aes_key()
 
-        # Material description should denote what key is used
-        assert material_description['kms_cmk_id'] == kms_key_alias
+            # Material description should denote what key is used
+            assert material_description['kms_cmk_id'] == kms_key_alias
 
-        resp = await kms_client.decrypt(CiphertextBlob=encrypted_aes_key, EncryptionContext=material_description)
-        assert aes_key == resp['Plaintext']
-
-        await kms_context.close()
+            resp = await kms_client.decrypt(CiphertextBlob=encrypted_aes_key, EncryptionContext=material_description)
+            assert aes_key == resp['Plaintext']
+        finally:
+            await kms_context.close()
 
 
 @pytest.mark.asyncio
